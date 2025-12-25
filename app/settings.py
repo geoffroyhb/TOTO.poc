@@ -3,7 +3,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "change-me"
+SECRET_KEY = "toto-poc-une-cle-longue-et-random-123456789"
+
 
 DEBUG = False
 
