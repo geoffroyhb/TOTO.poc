@@ -18,22 +18,21 @@ def _safe_float(x):
 def test_upload(request):
     now = int(time.time())
 
-    # Démarrer le timer à la 1ère visite
-    start_ts = request.session.get("test_start_ts")
-    if not start_ts:
-        request.session["test_start_ts"] = now
-        start_ts = now
+    # Timer via cookie (pas de session)
+    start_ts = request.COOKIES.get("test_start_ts")
+    if start_ts is None:
+        start_ts = str(now)
 
     elapsed = now - int(start_ts)
-    remaining = DURATION_SECONDS - elapsed
-    if remaining < 0:
-        remaining = 0
+    remaining = max(0, DURATION_SECONDS - elapsed)
 
-    # GET : afficher la page + le timer restant
     if request.method == "GET":
-        return render(request, "test_upload.html", {"remaining_seconds": remaining})
+        resp = render(request, "test_upload.html", {"remaining_seconds": remaining})
+        # on pose le cookie au 1er GET
+        if "test_start_ts" not in request.COOKIES:
+            resp.set_cookie("test_start_ts", start_ts, max_age=DURATION_SECONDS, samesite="Lax")
+        return resp
 
-    # POST : si le temps est écoulé, on bloque
     if remaining <= 0:
         return HttpResponse(
             "⏰ Temps écoulé. Upload refusé.\n(Recharge /test pour relancer une nouvelle session.)",
@@ -45,15 +44,13 @@ def test_upload(request):
     if not f:
         return HttpResponse("Aucun fichier reçu", status=400)
 
-    # --- Correction (score /20) ---
     try:
         wb = openpyxl.load_workbook(f, data_only=False)
     except Exception as e:
         return HttpResponse(f"Fichier illisible (.xlsx attendu) : {e}", status=400)
 
     ws = wb.active
-    target_cell = ws["B2"]
-    formula = target_cell.value
+    formula = ws["B2"].value
 
     score = 0
     feedback = []
@@ -73,7 +70,7 @@ def test_upload(request):
         score += 5
         feedback.append("✅ Plage B3:B7 trouvée dans la formule (+5).")
     else:
-        feedback.append(f"⚠️ Plage attendue B3:B7 non trouvée dans la formule : {formula} (+0).")
+        feedback.append(f"⚠️ Plage attendue B3:B7 non trouvée : {formula} (+0).")
 
     values = []
     for r in range(3, 8):
@@ -86,9 +83,9 @@ def test_upload(request):
 
     if values and ("SOMME" in normalized or "SUM" in normalized):
         score += 5
-        feedback.append("✅ Formule de somme cohérente avec les données (+5).")
+        feedback.append("✅ Formule de somme cohérente (+5).")
     else:
-        feedback.append("⚠️ Impossible de valider la cohérence (+0).")
+        feedback.append("⚠️ Cohérence non validée (+0).")
 
     verdict = "🎉 Parfait !" if score == 20 else ("✅ Très bien" if score >= 15 else ("🟠 Correct" if score >= 10 else "🔴 À revoir"))
 
