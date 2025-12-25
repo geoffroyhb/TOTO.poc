@@ -8,9 +8,30 @@
       qui calcule la somme de <b>B3:B7</b> (ex : =SOMME(B3:B7)).
     </p>
 
+    <h3>⏳ Temps restant : <span id="timer"></span></h3>
+
     <form method="POST" enctype="multipart/form-data">
       <input type="file" name="file" accept=".xlsx" required />
       <button type="submit">Envoyer</button>
     </form>
+
+    <script>
+      let remaining = {{ remaining_seconds|default:0 }};
+      const el = document.getElementById("timer");
+
+      function format(sec) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+      }
+
+      function tick() {
+        el.textContent = format(remaining);
+        if (remaining <= 0) return;
+        remaining -= 1;
+        setTimeout(tick, 1000);
+      }
+      tick();
+    </script>
   </body>
 </html>
