@@ -9,6 +9,7 @@
     <p><b>{{ q.statement }}</b></p>
 
     <form method="POST">
+      {% csrf_token %}
       <label><input type="radio" name="selected" value="A" {% if selected == "A" %}checked{% endif %}/> A) {{ q.a }}</label><br/>
       <label><input type="radio" name="selected" value="B" {% if selected == "B" %}checked{% endif %}/> B) {{ q.b }}</label><br/>
       <label><input type="radio" name="selected" value="C" {% if selected == "C" %}checked{% endif %}/> C) {{ q.c }}</label><br/>
