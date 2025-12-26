@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial; max-width: 900px; margin: 30px auto;">
+    <h2>Test (Question {{ order }}/{{ total }})</h2>
+    <div style="color:#666;">⏳ Temps restant : <span id="timer"></span></div>
+
+    <hr/>
+
+    <p><b>{{ q.statement }}</b></p>
+
+    <form method="POST">
+      <label><input type="radio" name="selected" value="A" {% if selected == "A" %}checked{% endif %}/> A) {{ q.a }}</label><br/>
+      <label><input type="radio" name="selected" value="B" {% if selected == "B" %}checked{% endif %}/> B) {{ q.b }}</label><br/>
+      <label><input type="radio" name="selected" value="C" {% if selected == "C" %}checked{% endif %}/> C) {{ q.c }}</label><br/>
+      <label><input type="radio" name="selected" value="D" {% if selected == "D" %}checked{% endif %}/> D) {{ q.d }}</label><br/><br/>
+
+      <button type="submit">Valider &amp; suivant</button>
+    </form>
+
+    <script>
+      let remaining = {{ remaining_seconds|default:0 }};
+      const el = document.getElementById("timer");
+
+      function format(sec) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+      }
+      function tick() {
+        el.textContent = format(remaining);
+        if (remaining <= 0) {
+          // temps écoulé -> résultat
+          window.location.href = "/result/{{ attempt_id }}";
+          return;
+        }
+        remaining -= 1;
+        setTimeout(tick, 1000);
+      }
+      tick();
+    </script>
+  </body>
+</html>
