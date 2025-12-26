@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial; max-width: 900px; margin: 30px auto;">
+    <h2>Résultat</h2>
+
+    <p><b>Score :</b> {{ score }}/{{ max_score }}</p>
+    <p style="color:#666;">Tentative : {{ attempt_id }} | Temps restant : {{ remaining_seconds }}s</p>
+
+    <a href="/test">🔄 Relancer un nouveau test</a>
+
+    <hr/>
+
+    <h3>Détails</h3>
+    <ul>
+      {% for d in details %}
+        <li>
+          <b>Q{{ d.order }}</b> — {% if d.ok %}✅{% else %}❌{% endif %}
+          <br/>
+          <span style="color:#333;">{{ d.statement }}</span>
+          <br/>
+          <span style="color:#666;">Réponse donnée : {{ d.selected }} | Bonne réponse : {{ d.correct }}</span>
+        </li>
+        <br/>
+      {% endfor %}
+    </ul>
+  </body>
+</html>
