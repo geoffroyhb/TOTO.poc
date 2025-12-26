@@ -11,5 +11,7 @@ urlpatterns = [
     path("test", start_test),  # lance une tentative
     path("q/<uuid:attempt_id>/<int:order>", question_page),
     path("result/<uuid:attempt_id>", result_page),
+    path("seed", seed_questions),
+
 
 ]
