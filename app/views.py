@@ -26,28 +26,56 @@ def test_upload(request):
     elapsed = now - int(start_ts)
     remaining = max(0, DURATION_SECONDS - elapsed)
 
+    # GET : page test + timer
     if request.method == "GET":
         resp = render(request, "test_upload.html", {"remaining_seconds": remaining})
-        # on pose le cookie au 1er GET
         if "test_start_ts" not in request.COOKIES:
             resp.set_cookie("test_start_ts", start_ts, max_age=DURATION_SECONDS, samesite="Lax")
         return resp
 
+    # POST : si temps écoulé -> page résultat "temps écoulé"
     if remaining <= 0:
-        return HttpResponse(
-            "⏰ Temps écoulé. Upload refusé.\n(Recharge /test pour relancer une nouvelle session.)",
-            content_type="text/plain; charset=utf-8",
+        return render(
+            request,
+            "result.html",
+            {
+                "verdict": "⏰ Temps écoulé",
+                "score": 0,
+                "remaining_seconds": 0,
+                "feedback": ["Upload refusé : le temps est écoulé."],
+            },
             status=403,
         )
 
     f = request.FILES.get("file")
     if not f:
-        return HttpResponse("Aucun fichier reçu", status=400)
+        return render(
+            request,
+            "result.html",
+            {
+                "verdict": "❌ Fichier manquant",
+                "score": 0,
+                "remaining_seconds": remaining,
+                "feedback": ["Aucun fichier n’a été reçu."],
+            },
+            status=400,
+        )
 
+    # Charger Excel
     try:
         wb = openpyxl.load_workbook(f, data_only=False)
     except Exception as e:
-        return HttpResponse(f"Fichier illisible (.xlsx attendu) : {e}", status=400)
+        return render(
+            request,
+            "result.html",
+            {
+                "verdict": "❌ Fichier invalide",
+                "score": 0,
+                "remaining_seconds": remaining,
+                "feedback": [f"Le fichier n’est pas lisible (.xlsx attendu). Détail : {e}"],
+            },
+            status=400,
+        )
 
     ws = wb.active
     formula = ws["B2"].value
@@ -55,16 +83,25 @@ def test_upload(request):
     score = 0
     feedback = []
 
+    # +10 si formule
     if isinstance(formula, str) and formula.startswith("="):
         score += 10
         feedback.append("✅ Formule détectée en B2 (+10).")
     else:
         feedback.append(f"❌ B2 n'est pas une formule (valeur trouvée : {formula}) (+0).")
-        return HttpResponse(
-            f"Score : {score}/20\n" + "\n".join(feedback),
-            content_type="text/plain; charset=utf-8",
+        return render(
+            request,
+            "result.html",
+            {
+                "verdict": "🔴 À revoir",
+                "score": score,
+                "remaining_seconds": remaining,
+                "feedback": feedback,
+            },
+            status=200,
         )
 
+    # +5 si plage B3:B7
     normalized = formula.replace(" ", "").upper()
     if "B3:B7" in normalized:
         score += 5
@@ -72,6 +109,7 @@ def test_upload(request):
     else:
         feedback.append(f"⚠️ Plage attendue B3:B7 non trouvée : {formula} (+0).")
 
+    # +5 cohérence “formule de somme” + données présentes
     values = []
     for r in range(3, 8):
         v = _safe_float(ws[f"B{r}"].value)
@@ -83,13 +121,27 @@ def test_upload(request):
 
     if values and ("SOMME" in normalized or "SUM" in normalized):
         score += 5
-        feedback.append("✅ Formule de somme cohérente (+5).")
+        feedback.append("✅ Formule de somme cohérente avec les données (+5).")
     else:
-        feedback.append("⚠️ Cohérence non validée (+0).")
+        feedback.append("⚠️ Impossible de valider la cohérence (+0).")
 
-    verdict = "🎉 Parfait !" if score == 20 else ("✅ Très bien" if score >= 15 else ("🟠 Correct" if score >= 10 else "🔴 À revoir"))
+    if score == 20:
+        verdict = "🎉 Parfait !"
+    elif score >= 15:
+        verdict = "✅ Très bien"
+    elif score >= 10:
+        verdict = "🟠 Correct"
+    else:
+        verdict = "🔴 À revoir"
 
-    return HttpResponse(
-        f"{verdict}\nScore : {score}/20\nTemps restant : {remaining}s\n\n" + "\n".join(feedback),
-        content_type="text/plain; charset=utf-8",
+    return render(
+        request,
+        "result.html",
+        {
+            "verdict": verdict,
+            "score": score,
+            "remaining_seconds": remaining,
+            "feedback": feedback,
+        },
+        status=200,
     )
