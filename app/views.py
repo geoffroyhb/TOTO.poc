@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 import openpyxl
 import time
+import re
 
 DURATION_SECONDS = 10 * 60  # 10 minutes
 
@@ -14,11 +15,44 @@ def _safe_float(x):
         return None
 
 
+def _normalize_formula(s: str) -> str:
+    # Retire espaces, majuscules, uniformise séparateurs FR/EN
+    s = (s or "").replace(" ", "").upper()
+    s = s.replace(";", ",")
+    return s
+
+
+def _mentions_all_cells(norm: str, cells: list[str]) -> bool:
+    # Vérifie que chaque cellule apparaît dans la formule (B3, B4, ...)
+    return all(c in norm for c in cells)
+
+
+def _looks_like_sum_solution(norm: str, expected_cells: list[str]) -> tuple[bool, str]:
+    """
+    Retourne (ok, reason) si la formule ressemble à une solution valide.
+    Solutions acceptées (tolérant) :
+      - SOMME(B3:B7) / SUM(B3:B7)
+      - SOMME(B3;B4;B5;B6;B7) / SUM(B3,B4,B5,B6,B7)
+      - B3+B4+B5+B6+B7
+    """
+    range_ok = "B3:B7" in norm
+    list_ok = _mentions_all_cells(norm, expected_cells) and ("," in norm or "(" in norm)
+    add_ok = _mentions_all_cells(norm, expected_cells) and "+" in norm
+
+    if range_ok:
+        return True, "Plage B3:B7 détectée"
+    if list_ok:
+        return True, "Liste B3..B7 détectée"
+    if add_ok:
+        return True, "Addition B3..B7 détectée"
+    return False, "Références B3..B7 non détectées"
+
+
 @csrf_exempt
 def test_upload(request):
     now = int(time.time())
 
-    # Timer via cookie (pas de session)
+    # Timer via cookie (plus fiable que session sur Render free)
     start_ts = request.COOKIES.get("test_start_ts")
     if start_ts is None:
         start_ts = str(now)
@@ -33,7 +67,7 @@ def test_upload(request):
             resp.set_cookie("test_start_ts", start_ts, max_age=DURATION_SECONDS, samesite="Lax")
         return resp
 
-    # POST : si temps écoulé -> page résultat "temps écoulé"
+    # POST : si temps écoulé -> résultat
     if remaining <= 0:
         return render(
             request,
@@ -80,10 +114,11 @@ def test_upload(request):
     ws = wb.active
     formula = ws["B2"].value
 
+    # Barème /20
     score = 0
     feedback = []
 
-    # +10 si formule
+    # +10 si B2 est une formule (pas une valeur en dur)
     if isinstance(formula, str) and formula.startswith("="):
         score += 10
         feedback.append("✅ Formule détectée en B2 (+10).")
@@ -101,15 +136,19 @@ def test_upload(request):
             status=200,
         )
 
-    # +5 si plage B3:B7
-    normalized = formula.replace(" ", "").upper()
-    if "B3:B7" in normalized:
-        score += 5
-        feedback.append("✅ Plage B3:B7 trouvée dans la formule (+5).")
-    else:
-        feedback.append(f"⚠️ Plage attendue B3:B7 non trouvée : {formula} (+0).")
+    # Multi-solutions tolérées
+    norm = _normalize_formula(formula)
+    expected_cells = ["B3", "B4", "B5", "B6", "B7"]
 
-    # +5 cohérence “formule de somme” + données présentes
+    # +5 si la formule référence correctement B3..B7 (plage, liste, addition)
+    ok_refs, reason = _looks_like_sum_solution(norm, expected_cells)
+    if ok_refs:
+        score += 5
+        feedback.append(f"✅ Références OK : {reason} (+5).")
+    else:
+        feedback.append(f"⚠️ Références attendues B3..B7 non trouvées : {formula} (+0).")
+
+    # Calcul de la somme attendue à partir des valeurs (B3..B7)
     values = []
     for r in range(3, 8):
         v = _safe_float(ws[f"B{r}"].value)
@@ -119,12 +158,17 @@ def test_upload(request):
     expected_sum = sum(values) if values else 0.0
     feedback.append(f"ℹ️ Somme attendue (B3:B7) = {expected_sum:g}")
 
-    if values and ("SOMME" in normalized or "SUM" in normalized):
-        score += 5
-        feedback.append("✅ Formule de somme cohérente avec les données (+5).")
-    else:
-        feedback.append("⚠️ Impossible de valider la cohérence (+0).")
+    # +5 si la formule est cohérente : SUM/SOMME ou addition explicite
+    is_sum_function = ("SUM(" in norm) or ("SOMME(" in norm)
+    is_explicit_add = ("+" in norm) and _mentions_all_cells(norm, expected_cells)
 
+    if values and ok_refs and (is_sum_function or is_explicit_add):
+        score += 5
+        feedback.append("✅ Solution de somme reconnue (SUM/SOMME ou addition) (+5).")
+    else:
+        feedback.append("⚠️ Cohérence non validée (formule non reconnue, refs manquantes ou données vides) (+0).")
+
+    # Verdict
     if score == 20:
         verdict = "🎉 Parfait !"
     elif score >= 15:
