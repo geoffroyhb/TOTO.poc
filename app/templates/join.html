@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial; max-width: 700px; margin: 40px auto;">
+    <h2>Rejoindre un test</h2>
+
+    {% if error %}
+      <p style="color:#b00020;"><b>{{ error }}</b></p>
+    {% endif %}
+
+    <form method="POST">
+      {% csrf_token %}
+      <label>Nom / Prénom</label><br/>
+      <input name="name" style="width:100%; padding:10px;" required /><br/><br/>
+
+      <label>Code session</label><br/>
+      <input name="code" style="width:100%; padding:10px;" required /><br/><br/>
+
+      <button type="submit" style="padding:10px 14px;">Commencer</button>
+    </form>
+  </body>
+</html>
