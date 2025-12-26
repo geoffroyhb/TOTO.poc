@@ -10,6 +10,26 @@ class Test(models.Model):
         return self.title
 
 
+class ClassSession(models.Model):
+    code = models.CharField(max_length=50, unique=True)  # ex: INSEEC-DEC26
+    test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name="sessions")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.code
+
+
+class Candidate(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(ClassSession, on_delete=models.CASCADE, related_name="candidates")
+    name = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.session.code})"
+
+
 class Question(models.Model):
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name="questions")
     order = models.PositiveIntegerField()  # 1..40
@@ -30,14 +50,14 @@ class Question(models.Model):
         ordering = ["order"]
 
     def __str__(self):
-        return f"Q{self.order} - {self.statement[:40]}"
+        return f"Q{self.order}"
 
 
 class Attempt(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name="attempts")
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name="attempts")
     started_at = models.DateTimeField(auto_now_add=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Attempt {self.id}"
@@ -53,6 +73,3 @@ class Answer(models.Model):
 
     class Meta:
         unique_together = [("attempt", "question")]
-
-    def __str__(self):
-        return f"{self.attempt_id} Q{self.question.order}={self.selected}"
